@@ -1,0 +1,5 @@
+
+1. Added DISCOs forecast
+2. Added DISCOs stats
+3. Added DISCOs model performance stats but it is only visible to admin
+3. Added feature to control tab viewing permissions

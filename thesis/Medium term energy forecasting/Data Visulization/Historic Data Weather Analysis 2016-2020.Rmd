@@ -1,0 +1,80 @@
+---
+title: "Historic Data Weather Analysis"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r libraries, warning=FALSE, message=FALSE, echo=FALSE}
+library('ggplot2')
+library('tidyr')
+library('sqldf')
+library('plotly')
+
+```
+### Time vs hourly load
+```{r filereading, warning=FALSE, message=FALSE, echo=FALSE}
+data <- read.csv('NPCC Historic Data 2016-07-01-2020-12-31.csv', header = TRUE)
+data$Time <- as.POSIXct(data$Time)
+
+```
+
+```{r cleaning_data, warning=FALSE, message=FALSE, echo=FALSE }
+data$year = format(data$Time, format="%Y")
+data$month = months(as.Date(data$Time))
+data$month_num = format(data$Time, format="%m")
+```
+
+### **How much total energy is consumed in every month for each year?**
+
+```{r total_energy, warning=FALSE, message=FALSE, echo=FALSE}
+monthly_total_energy = sqldf("SELECT Time, month_num, year, avg(hourly_load) as total_energy, avg(Lahore_temperature) as lhr_avg_tmp from data group by month_num, year")
+
+#x_axis <- list(ticktext=list("Jan", "Feb", "March", "April", "May", "June", "July", "August", "Sep", "Oct", "Nov", "Dec" ), tickvals = list(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12),
+#      tickmode = "array", title="Months")
+
+
+fig2 <- plot_ly(monthly_total_energy, x=monthly_total_energy$month_num, y=monthly_total_energy$lhr_avg_tmp, color = monthly_total_energy$year, type='scatter', mode='lines')
+fig2 <- fig2 %>% layout(xaxis = x_axis)
+
+fig2
+
+#fig3 <- plot_ly(monthly_total_energy, x=monthly_total_energy$month_num, y=monthly_total_energy$total_energy,
+            #    color = monthly_total_energy$year, type='bar')
+#fig3 <- fig3 %>% layout(xaxis = x_axis)
+
+
+
+```
+
+```{r categorical x}
+tmp_data = sqldf("SELECT month, Time, month_num, year, avg(hourly_load) as total_energy, avg(Lahore_temperature) as lhr_avg_tmp from data group by month_num, year")
+tmp_data$lhr_avg_tmp[is.na(tmp_data$lhr_avg_tmp)] <- 0
+
+ay <- list(
+  tickfont = list(color = "red"),
+  overlaying = "y",
+  side = "right",
+  title = "Average Lahore Temperature"
+)
+
+fig <- plot_ly()
+fig <- fig %>% add_bars(x = list(tmp_data$year, tmp_data$month_num), y= tmp_data$total_energy, name='Total monthly energy') 
+fig <- fig %>% add_bars(x = list(tmp_data$year, tmp_data$month_num), y= tmp_data$lhr_avg_tmp, name='AVG Lhr energy', yaxis = "y2") 
+
+fig <- fig %>% layout(
+    title = "Double Y Axis", yaxis2 = ay,
+    xaxis = list(title="x")
+  )
+
+
+fig
+```

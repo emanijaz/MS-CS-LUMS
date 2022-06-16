@@ -1,0 +1,11 @@
+name: Publish Document
+title:
+username:
+account: rpubs
+server: rpubs.com
+hostUrl: rpubs.com
+appId: https://api.rpubs.com/api/v1/document/784548/0b43e2980f4a492e8c6c7edc379d9349
+bundleId: https://api.rpubs.com/api/v1/document/784548/0b43e2980f4a492e8c6c7edc379d9349
+url: http://rpubs.com/eman_ijaz/784548
+when: 1624538171.66545
+lastSyncTime: 1624538171.66548

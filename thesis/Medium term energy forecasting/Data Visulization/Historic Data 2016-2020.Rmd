@@ -1,0 +1,209 @@
+---
+title: "Historic Data 2016-2020"
+author: "Eman"
+date: "June 23, 2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r libraries, warning=FALSE, message=FALSE, echo=FALSE}
+library('ggplot2')
+library('tidyr')
+library('sqldf')
+library('plotly')
+
+```
+
+
+### Time vs hourly load
+```{r filereading, warning=FALSE, message=FALSE, echo=FALSE}
+data <- read.csv('NPCC Historic Data 2016-07-01-2020-12-31.csv', header = TRUE)
+data$Time <- as.POSIXct(data$Time)
+fig1 <- plot_ly(data, x = data$Time, y= data$hourly_load, mode='lines', type='scatter')
+fig1
+
+```
+
+The above graph shows the energy load for time span of July, 2016 - Dec, 2020. Due to population and economic growth, the demand for energy is continuously increasing with every passing year. Morover, in summer months the energy demand is high as compared to winter months. This shows that temperature has also huge effect on energy demand and consumption.
+
+```{r cleaning_data, warning=FALSE, message=FALSE, echo=FALSE }
+data$year = format(data$Time, format="%Y")
+data$month = months(as.Date(data$Time))
+data$month_num = format(data$Time, format="%m")
+
+
+```
+
+
+
+### **How much total energy is consumed in every month for each year?**
+
+```{r total_energy, warning=FALSE, message=FALSE, echo=FALSE}
+monthly_total_energy = sqldf("SELECT month_num, year, avg(hourly_load) as total_energy from data group by month_num, year")
+
+x_axis <- list(ticktext=list("Jan", "Feb", "March", "April", "May", "June", "July", "August", "Sep", "Oct", "Nov", "Dec" ), tickvals = list(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12),
+      tickmode = "array", title="Months")
+
+
+fig2 <- plot_ly(monthly_total_energy, x=monthly_total_energy$month_num, y=monthly_total_energy$total_energy,
+                color = monthly_total_energy$year, type='scatter', mode='lines')
+fig2 <- fig2 %>% layout(xaxis = x_axis)
+
+
+fig3 <- plot_ly(monthly_total_energy, x=monthly_total_energy$month_num, y=monthly_total_energy$total_energy,
+                color = monthly_total_energy$year, type='bar')
+fig3 <- fig3 %>% layout(xaxis = x_axis)
+
+
+fig_total_energy <- subplot(fig2, fig3, nrows=2, margin = 0.1)
+title <- (list="Total Energy analysis")
+y_axis <- list(title = 'Total Energy (MWh)')
+x_axis <- list(title = 'Months')
+fig_total_energy <- fig_total_energy %>% layout(title=title, yaxis=y_axis, xaxis = x_axis)
+fig_total_energy
+```
+
+
+**Less energy consumption for year 2020**
+
+Analysis of above graph shows that total energy consumption in first half of year 2020 has been overall less as compared to the previous years. Months of March and April is showing huge decrement in energy consuption where the usage was high in the past years especially in 2018 and 2019.
+
+**Reasons for downfall in energy consumption for 2020 year**
+
+This would be probably because of pandemic and lockdown due to covid-19. Serious lockdown situations in months of March and April resulted in both lower generation and consumption of electricity. Due to slower economic activities, energy generation decreased from 10.3K MWh (in 2019) to 9.3kMWh (in 2020 ) for the month of March. This month seemed to have the lowest energy consumption record for the year 2020. Whereas, for the subsequent years, comparatively there is more energy consumption. But on yearly comparison, the consumption is still less. In April month (2020) only 11.6KMWh energy is consumed which is quite low as compared to 13.5KMWh in 2019. 
+
+
+**Increase in energy consumption for year 2020**
+
+From month May and onwards, there seems to be an increase energy consumption as compared to previous months. This is because of lockdown removal and more economical stability. Analsysis of second half year of 2020 shows more electricity consumption and generation. In June, energy consumption (18.4k MWh) surpassed the previous years' consumption. June month consumption was even **doubled** as compared to that of March. July record marked as highest for the whole 2020 year and even significant improved was shown as compared to past years. Rise in this consumption might be due to **high temperature** for summer months. But it is also due to the **conversion on hydyropower and coal based power generation** from furnace oil and gas in year 2020. Previous reports shown that it is due to more availability of water in this year as compared to the previous ones. So, more energy consumption trend is seen for the rest of months of year 2020 as well when yearly comparison is drawn. 
+
+**Summers and Winters trend**
+
+As compared to Summer Months, overall less energy is consumed in winter moths due to less temperature and more load is seen for summer months. This holds true for all the years as seen from the graph plot.
+
+
+### **peak power analysis in every month for each year**
+
+```{r peak_power, warning=FALSE, message=FALSE, echo=FALSE }
+monthly_peak_energy = sqldf("SELECT month_num, year, max(hourly_load) as peak_power from data group by month_num, year")
+
+x_axis <- list(ticktext=list("Jan", "Feb", "March", "April", "May", "June", "July", "August", "Sep", "Oct", "Nov", "Dec" ), tickvals = list(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12),tickmode = "array", title="Months")
+
+fig4 <- plot_ly(monthly_peak_energy, x=monthly_peak_energy$month_num, y=monthly_peak_energy$peak_power,
+                color = monthly_peak_energy$year, type='scatter', mode='lines')
+fig4 <- fig4 %>% layout(xaxis = x_axis)
+
+
+fig5 <- plot_ly(monthly_peak_energy, x=monthly_peak_energy$month_num, y=monthly_peak_energy$peak_power,
+                color = monthly_peak_energy$year, type='bar')
+fig5 <- fig5 %>% layout(xaxis = x_axis)
+
+
+fig_peak_power <- subplot(fig4, fig5, nrows=2, margin = 0.1)
+title <- (list="Peak Power analysis")
+y_axis <- list(title = 'Peak Power(MW)')
+x_axis <- list(title = 'Months')
+fig_peak_power <- fig_peak_power %>% layout(title=title, yaxis=y_axis, xaxis = x_axis)
+fig_peak_power
+```
+
+The above graph shows peak power analysis for all months of year 2016 - 2020. In 2020, the peak power of March is quite low as compared to the rest of months of year 2020 and other years as well. Lockdown circumstances and its effect are major reasons for less energy consumption. For months of June, July and August, the peak power is rising for each growing year. Highest peak power is shown by July in year of 2020 which depicts the largest consumption of energy from July 2016 - Dec 2020. 
+
+### **Yearly Stats using boxplots**
+
+```{r boxplot, warning=FALSE, message=FALSE, echo=FALSE}
+box_plot_data_2016 = sqldf("SELECT month_num, year, hourly_load from data where year = '2016' ")
+
+x_axis <- list(ticktext=list("Jan", "Feb", "March", "April", "May", "June", "July", "August", "Sep", "Oct", "Nov", "Dec" ), tickvals = list(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12),tickmode = "array", title="Months")
+
+fig5 <- plot_ly(box_plot_data_2016, x=box_plot_data_2016$month_num, y=box_plot_data_2016$hourly_load,
+                 type='box')
+fig5 <- fig5 %>% layout(xaxis = x_axis)
+
+box_plot_data_2017 = sqldf("SELECT month_num, year, hourly_load from data where year = '2017' ")
+fig6 <- plot_ly(box_plot_data_2017, x=box_plot_data_2017$month_num, y=box_plot_data_2017$hourly_load,
+                 type='box')
+fig6 <- fig6 %>% layout(xaxis = x_axis)
+
+box_plot_data_2018 = sqldf("SELECT month_num, year, hourly_load from data where year = '2018' ")
+fig7 <- plot_ly(box_plot_data_2018, x=box_plot_data_2018$month_num, y=box_plot_data_2018$hourly_load,
+                 type='box')
+fig7 <- fig7 %>% layout(xaxis = x_axis)
+
+box_plot_data_2019 = sqldf("SELECT month_num, year, hourly_load from data where year = '2019' ")
+fig8 <- plot_ly(box_plot_data_2017, x=box_plot_data_2019$month_num, y=box_plot_data_2019$hourly_load,
+                 type='box')
+fig8 <- fig8 %>% layout(xaxis = x_axis)
+
+box_plot_data_2020 = sqldf("SELECT month_num, year, hourly_load from data where year = '2020' ")
+fig9 <- plot_ly(box_plot_data_2020, x=box_plot_data_2020$month_num, y=box_plot_data_2020$hourly_load,
+                 type='box')
+fig9 <- fig9 %>% layout(xaxis = x_axis)
+fig <- subplot(fig5, fig6, fig7, fig8, fig9, nrows = 3, margin = 0.08)
+fig
+
+### without subplots
+myfig = plot_ly(data, x =data$month_num, y= data$hourly_load, color = data$year, type='box')
+myfig <- myfig %>% layout(boxmode = "group", xaxis = x_axis, yaxis = list(title='Hourly Load (MW)'))
+myfig
+
+```
+
+
+### **Box Plot Analysis**
+The above plot shows the statistics for all years from 2016 to 2020. High variability is shown in summer months with high energy consumption because of high temperature. Whereas, low variability is due to low consumption for winter reasons due to less temperature. First half of 2020 year is showing some unexpected variations specifically for March and April months as compared to the previous years due to energy shortage and low energy consumption in lockdown situations. 
+
+
+### **Temperature effect on hourly load- Yearly comparison**
+
+```{r avg_tmp, warning=FALSE, message=FALSE, echo=FALSE}
+avg_tmp = sqldf("SELECT month_num, year, avg(Sukkur_temperature) as avg_suk_temp, avg(Lahore_temperature) as avg_lhr_temp, avg(Multan_temperature) as avg_mult_temp, avg(Faislabad_temperature) as avg_fsd_temp,avg(Quetta_temperature) as avg_quetta_temp, avg(Peshawar_temperature) as avg_pshw_temp, avg(Gujranwala_temperature) as avg_gjrn_temp, avg(Hyderabad_temperature) as avg_hydr_temp,avg(Islamabad_temperature) as avg_isl_temp from data group by month_num, year")
+
+
+x_axis <- list(ticktext=list("Jan", "Feb", "March", "April", "May", "June", "July", "August", "Sep", "Oct", "Nov", "Dec" ), tickvals = list(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12),
+      tickmode = "array", title="Months")
+
+
+fig2 <- plot_ly(avg_tmp, x=avg_tmp$month_num, y=(avg_tmp$avg_suk_temp+ avg_tmp$avg_lhr_temp + avg_tmp$avg_mult_temp+
+  avg_tmp$avg_fsd_temp + avg_tmp$avg_quetta_temp+ avg_tmp$avg_pshw_temp+avg_tmp$avg_gjrn_temp+avg_tmp$avg_hydr_temp
++ avg_tmp$avg_isl_temp )/9,
+                color = avg_tmp$year, type='scatter', mode='lines')
+fig2 <- fig2 %>% layout(xaxis = x_axis)
+
+
+fig3 <- plot_ly(avg_tmp, x=avg_tmp$month_num, y=(avg_tmp$avg_suk_temp+ avg_tmp$avg_lhr_temp + avg_tmp$avg_mult_temp+
+  avg_tmp$avg_fsd_temp + avg_tmp$avg_quetta_temp+ avg_tmp$avg_pshw_temp+avg_tmp$avg_gjrn_temp+avg_tmp$avg_hydr_temp
++ avg_tmp$avg_isl_temp)/9 ,
+                color = avg_tmp$year, type='bar')
+fig3 <- fig3 %>% layout(xaxis = x_axis)
+
+
+fig_total_energy <- subplot(fig2, fig3, nrows=2, margin = 0.1)
+title <- (list="Average Temperature analysis")
+y_axis <- list(title = 'Average Temperature')
+x_axis <- list(title = 'Months')
+fig_total_energy <- fig_total_energy %>% layout(title=title, yaxis=y_axis, xaxis = x_axis)
+fig_total_energy
+```
+
+The above graph shows the average temperature of all major areas of Pakistan in all months of years 2016-2020. Due to some missing data we are able to plot 2019 and 2020 temperature data only. It shows that in months of May and June of 2020 the temperature was less as compared to that of 2019. This could be due to the effect of less global warming in the time of pandemic/lockdown as the outdoor pollution would be less. Therefore, the less consumption of load in these months of 2020 could also be due to the effect of less temperature. For 2019, normal trend of temperature is shown.
+
+
+Code for producing above plots is as follows:
+
+```{r ref.label='filereading', eval=FALSE}
+```
+```{r ref.label='cleaning_data', eval=FALSE}
+```
+```{r ref.label='total_energy', eval=FALSE}
+```
+```{r ref.label='peak_power', eval=FALSE}
+```
+```{r ref.label='box_plot', eval=FALSE}
+```
+```{r ref.label='avg_tmp', eval=FALSE}
+```

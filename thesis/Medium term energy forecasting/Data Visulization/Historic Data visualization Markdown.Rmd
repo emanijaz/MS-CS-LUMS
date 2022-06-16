@@ -1,0 +1,327 @@
+---
+title: "Historic Data Visualization Report"
+author: "Eman"
+date: "June 11, 2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+
+Following report contains the various graphs for data analysis on Historic Energy Data. 
+
+### **Importing libraries**
+
+For plotting graphs and data visualizations we import all the required libraries.
+
+```{r libraries, warning=FALSE, message=FALSE, echo=FALSE}
+library('ggplot2')
+library('tidyr')
+library('sqldf')
+library('plotly')
+```
+
++ **ggplot2** is used for plotting graphs.
++ **tidyr** is used for tidying messy data.
++ **sqldf** is being used for writing sql query to extract data.
+
+### **Reading csv File**
+
+Following code reads the csv file **Historic_NPCC_Load_Forecast_Weather_OLD.csv** as a dataframe in the variable `load_data`.
+
+```{r filereading, echo=FALSE}
+load_data <- read.csv('Historic_NPCC_Load_Forecast_Weather_OLD.csv', header = TRUE)
+load_data$Time <- as.POSIXct(load_data$Time) 
+
+load_data1<- load_data
+dt<-tidyr::separate(load_data1, Time, c("date", "time"), sep = " ")
+hms<-tidyr::separate(dt, time, c("hour", "min", "secs"), sep = ":", remove=FALSE)
+ymd<-tidyr::separate(hms, date, c("year", "month", "day"), sep = "-", remove=FALSE)
+ymd$weekdays <- weekdays(as.Date(ymd$date,'%Y-%m-%d'))
+```
+
+`load_data` looks as follows:
+
+![](csv_data.png)
+
+
+### **Peak Hour Analysis**
+
+Following graph shows the peak hour energy analysis for each month of year 2019. Plot shows that peak power for **September** month is the greatest i-e (22696 MW) and for **February** it is the lowest i-e (12473 MW). Therefore, September witnessed the most energy consuming hour of the year 2019.
+
+``` {r monthly_peak_power, message=FALSE, echo=FALSE}
+peak_hr_data = sqldf("SELECT date, month, day, hour, sum(hourly_load) as month_total_energy, max(hourly_load) as month_peak_power from ymd group by month")
+month_names<-months(as.Date(peak_hr_data$date))
+date =  as.POSIXct(peak_hr_data$date)
+fig8 <- plot_ly(peak_hr_data, x = date, y=peak_hr_data$month_peak_power, type = 'scatter', mode='line', hovertemplate = paste(
+    'Total month energy: ', peak_hr_data$month_total_energy, 'MWh', '<br>', 'Peak Energy: ', peak_hr_data$month_peak_power,'MW' ,'<br>', 'Hour: ', peak_hr_data$hour, '<br>','Date: ',peak_hr_data$day,' ', month_names))
+
+x_axis_8 <- list(title='Month')
+y_axis_8 <- list(title = 'Peak Power(MW)')
+title_8 <- (list="Peak Hour Analysis")
+fig8 <- fig8 %>% layout(xaxis = x_axis_8, yaxis = y_axis_8, title=title_8)
+fig8
+
+
+```
+
+### **Monthly energy consumption**
+
+The following plot shows the total energy consumed for every month of the year 2019. After analysis it is concluded that for months **May, June, July, August and September** the amount of energy(MWh) consumed is highest as compared to other months of the year. So, we can say energy demand for summers is higher than that of winters. Based on this anslysis, the similar trend can be predicted for the upcoming years as well.
+
+```{r monthly_total_energy, message=FALSE, echo=FALSE}
+monthly_load_data = sqldf("SELECT date, month,sum(hourly_load) as month_total_energy from ymd group by month")
+month_names<-months(as.Date(monthly_load_data$date))
+date =  as.POSIXct(monthly_load_data$date)
+
+fig9 <- plot_ly(monthly_load_data, x = date, y=monthly_load_data$month_total_energy, type = 'scatter', mode='line', hovertemplate = paste('Total month energy: ', monthly_load_data$month_total_energy, 'MWh', '<br>','Month: ', month_names))
+
+x_axis_9 <- list(title='Months')
+y_axis_9 <- list(title = 'Total Month Energy (MWh)')
+title_9 <- (list="Monthly load (MWh)")
+fig9 <- fig9 %>% layout(xaxis = x_axis_9, yaxis = y_axis_9, title=title_9)
+fig9
+
+```
+
+
+### **Hours and months energy relation**
+
+```{r hour_vs_month, warning=FALSE, message=FALSE, echo=FALSE }
+hr_vs_month<- sqldf('SELECT avg(hourly_load) as avgload, hour, month from ymd group by hour, month')
+month_names<-month.abb[as.integer(hr_vs_month$month)]
+fig10 <- plot_ly(hr_vs_month, x = hr_vs_month$hour, y=hr_vs_month$avgload, color=hr_vs_month$month, type = 'scatter', mode = 'lines', hovertemplate = paste(
+    'Month: ', month_names,'<br>', 'Avg Hourly Load: ', hr_vs_month$avgload, '<br>', 'Hour: ', hr_vs_month$hour),
+    marker = list(opacity=.9,colorscale='Viridis'))
+
+x_axis_10 <- list(title='Hours')
+y_axis_10 <- list(title = 'hourly_load')
+title_10 <- (list="month load vs hours")
+fig10 <- fig10 %>% layout(xaxis = x_axis_10, yaxis = y_axis_10, title=title_10)
+fig10
+```
+
+**Winter seasons analysis**
+
+The following plot shows the avg hourly load for 24 hours and for every month. For winter months(Nov, Dec, Jan, Feb, March) it seems to be less usage of electricity with average hourly load in range (7K MWh to 12.5K MWh). The biggest peak is shown for evening time between (4pm to 7pm). At this time people usually get home and use electricity for cooking or warming their houses and rely on electric heaters or geysers. Other than this, at morning, the load starts to rise as people mostly use lights, cooking appliances and a morning peak is shown for the time between (9:00am to 11:00am). At night hours, the load is quite less as compared to other hours as their is no usage of electricity at night neither in form of lights, fans, or heating appliances. 
+
+**Summer seasons analysis**
+Generally less electicity is consumed in winter months (May, June, July, August, September) as compared to summers when the hourly load is maximum ranging in between (16.5k MWh to 20.5k MWh). At middle of day, a huge peak shows the most energy consumption. This is due to cooling appliances specially air conditioners which are being used in offices and homes. From 6.00am there is sharp increase in the peak and it gets maximum at the 1:00pm and remains till 3:00pm.  Afterwards, there is sharp decline in electricity usage. As people move to their homes and very little appliances are being used at that time. From 5:00pm onwards, peak start rising again as moslty people are using air conditioners and fans at their homes which are biggest source of energy consumption. Again at night till morning the load is comparatively less than morning hours.
+
+**Spring/Autumn seasons analysis**
+For spring season, in April, the same summer trend is shown from the start of day till 8:00pm in the night. April is hot like summers in the day time so similar hourly load peaks are visible in day time as well. But during night, as temperature gets down and nights get cooler they become more sort of winter nights. Thats why graph shows again dip in curve at night times. In contrary to summers, people are not using air conditioners or heavy electriity demanding appliances at nights of spring season. Therefore, from night till dawn the trend is similar to winters season. In October, the same trend occurs just like April month.
+
+
+
+### **Weeks and months energy relation**
+
+```{r week_vs_month, warning=FALSE, message=FALSE, echo=FALSE }
+week_vs_month<- sqldf('SELECT avg(hourly_load) as avgload, weekdays, month from ymd group by weekdays, month')
+month_names<-month.abb[as.integer(week_vs_month$month)]
+fig11 <- plot_ly(week_vs_month, x = week_vs_month$weekdays, y=week_vs_month$avgload, color=week_vs_month$month, type = 'scatter', mode = 'lines', hovertemplate = paste(
+    'Month: ', month_names,'<br>', 'Avg Hourly Load: ', week_vs_month$avgload, '<br>', 'Weekday: ', week_vs_month$weekdays), marker = list(opacity=.9,colorscale='Viridis'))
+
+x_axis_11 <- list(title='Weekdays')
+y_axis_11 <- list(title = 'hourly_load')
+title_11 <- (list="month load vs weekdays")
+fig11 <- fig11 %>% layout(xaxis = x_axis_11, yaxis = y_axis_11, title=title_11)
+fig11
+
+```
+
+
+
+Here, in weekly plot with respect to months hourly load, we make some inferences depending on weekdays, weekends and holidays. Depending upon these factors, the activities of people vary and so the usage of appliances. Usually on weekends (Saturday and Sunday) offices, schools and other institutions are closed hence less electricity is required by lights, fans, computers etc. In June, due to holidays, mostly people spend their time at home due to closed offices, schools etc and overall less electricity is consumed on weekdays. Same trend is visible in April due to vacations. In July, Aug, Sep, institutions again get open and people are most busy on weekdays and consume more electrical appliances. In rest of the months as well, weekends have down peaks showing less energy consumed and more on usual regular weekdays. Other than these factors, socio-economic and weather conditions also play role in variation of energy load.
+
+
+### **Graph between `Time` and `hourly_load`**
+
+Following line graph shows the relation between `Time` and `hourly_load` on x and y axis respectively. Graph shows a curve with more energy being consumed in months of the May, June, July, August, September. It depicts demand of energy is more in summers as compared to demand in winters(Oct, Nov, Dec, Jan, Feb, March).
+
+```{r load, warning=FALSE, message=FALSE, echo=FALSE}
+fig<-plot_ly(load_data, x=load_data$Time, y=load_data$hourly_load, mode='line', type='scatter')
+x_axis <- list(title='Time')
+y_axis <- list(title= 'hourly_load')
+title <- (list="Time and hourly_load plot")
+fig <- fig %>% layout(xaxis = x_axis, yaxis = y_axis, title=title)
+fig
+```
+
+
+
+### **Frequency count of `hourly_load`**
+
+Following histogram plot of `hourly_load` is showing the number of occurrences of hourly_load. After analysis it is shown that most frequent hourly_load is hit at approximately **11Mwh** for about 600 times.
+
+``` {r hourly_load_frequency_hist,  warning=FALSE, message=FALSE, echo=FALSE}
+fig1<- plot_ly(x=load_data$hourly_load, type = 'histogram')
+x_axis_1 <- list(title='hourly_load')
+y_axis_1 <- list(title = 'frequency')
+title_1 <- (list="Histogram for energy load")
+fig1 <- fig1 %>% layout(xaxis = x_axis_1, yaxis = y_axis_1, title=title_1)
+fig1
+```
+
+
+### **Data Preparation using `tidyr`**
+ 
++ Splitting the **Time** column into  `time` and `date` columns separately using space as a separator.
++ Now, splitting **time** column into `hours`, `min` and `secs` columns with `:` as a separator.
++ Aterwards, splitting **date** column into `year`, `month` and  `day` columns using `-` as a separator.
++ Lastly, converting **date** column into weekdays (Mon, Tue, Wed, Thur, Fri)
+
+`remove=FALSE` will keep the column which is being splitted in the dataframe.
+
+
+
+
+After splitting, the final dataframe `ymd` looks as follows: 
+
+![](cleaned_data.png)
+
+### **Monthly Data Visualization**
+
+#### **BoxPlot**
+
+Following code plots the monthly stats using box plot with `month` on x-axis and `hourly_load` on y-axis. If two box plots have medians such that they dont intersect each other boxes it shows that there is likely to be a difference in those groups. Here we can see that June, July, August and September months have almost intersecting medians so there energy differences are not much high. As temperature is quite high in these months therefore, more usage of appliances results in more energy usage. So no sharp energy difference is shown in these months. Alternatively, if we compare January and July months, there box plots' medians are immensely far away from each other which shows varied energy consumptions. As in winter months less energy is consumed so the spread of winter box plots is on low enery scale as compared to summer month box plots.   
+
+```{r month_boxplot_graph, warning= FALSE,warning=FALSE, echo=FALSE}
+month<-month.abb[as.integer(ymd$month)]
+fig2<- plot_ly(ymd,x=month,y= ymd$hourly_load, color=month ,type='box')
+x_axis_2 <- list(title='months')
+y_axis_2 <- list(title = 'hourly_load')
+title_2 <- (list="Box Plot for months' energy load")
+fig2 <- fig2 %>% layout(xaxis = x_axis_2, yaxis = y_axis_2, title=title_2)
+fig2
+```
+
+
+#### **Monthly Statistics**
+
+
+Now we plot monthly stats of data. For that purpose, first we write a `sqldf` query for retreiving the stats as maximum, minimum and average `hourly_load` after grouping on `month` column. This will give us max/min/avg hourly loads for each month. Analysis of graph is showing that from months May to September the maximum energy trend keeps rising and advocates the more usage of energy in these summer months. As more appliances are used (air conditioners, referigerators etc ) in these months in all sectors including (residential, industrial etc), so more energy is being consumed. While in cold months, the graphs shows a decreasing trend in energy consumption. 
+
+``` {r month_stats_graph, warning=FALSE, message=FALSE, echo=FALSE}
+monthly_load_stats = sqldf('SELECT month, max(hourly_load) as max_load, min(hourly_load) as min_load, avg(hourly_load) as avg_load from ymd group by month')
+
+fig3 <- plot_ly(monthly_load_stats, x = monthly_load_stats$month, y=monthly_load_stats$max_load, name = 'maximum hourly_load', type = 'scatter', mode = 'lines')
+fig3 <- fig3 %>% add_trace(y =monthly_load_stats$min_load, name = 'minimum hourly_load',mode = 'lines',type = 'scatter')
+fig3 <- fig3 %>% add_trace(y =monthly_load_stats$avg_load, name = 'average hourly_load',mode = 'lines',type = 'scatter')
+x_axis_3 <- list(title='months')
+y_axis_3 <- list(title = 'hourly_load')
+title_3 <- (list="Energy stats for months")
+fig3 <- fig3 %>% layout(xaxis = x_axis_3, yaxis = y_axis_3, title=title_3)
+fig3
+```
+
+### **Daily Data Visualizations**
+
+
+#### **Box Plot**
+
+Following code plots the daily stats using box plot with `day` on x-axis and `hourly_load` on y-axis. The graph shows minimum, maximum, quartiles, and dispersion for all weekdays of the year. After analysis, we come to the conclusion that box spread for holidays i-e (Saturday and Sunday) is less as compared to box spread for week days (Mon, Tue, Wed, Thur, Fri). This shows that more energy is being utilised on weekdays due to workload. As the usage of appliances/machines in schools, hospitals, industries and offices is more on weekdays as compared to holidays so more spread or box length is shown for weekdays.
+
+
+``` {r daily_box_plot, warning=FALSE, message=FALSE, echo=FALSE}
+
+
+fig4<- plot_ly(ymd,y= ymd$hourly_load, color=ymd$weekdays ,type='box')
+x_axis_4 <- list(title='Days')
+y_axis_4 <- list(title = 'hourly_load')
+title_4 <- (list="Box Plot for Week Days' energy load")
+fig4 <- fig4 %>% layout(xaxis = x_axis_4, yaxis = y_axis_4, title=title_4)
+fig4
+
+```
+
+
+### **Daily Statistics**
+
+Now we plot daily stats of the data. For that purpose, first we write a `sqldf` query for retreiving the stats as maximum, minimum and average `hourly_load` after grouping on `weekdays` column. This will give us max/min/avg hourly loads for each weekday of the year. Analysis of this graph shows the same energy load difference between weekdays and holidays. For Saturday and Sunday, there is a downfall in hourly_load as less energy is consumed on these days. Due to more work in industrial sector and offices on weekdays, the maximum hourly_load trend is higher for these days. Furthermore, maximum hourly load is highest for Wednesday and it seems to be the most busiest workday. 
+
+
+``` {r daily_stats_graph, warning=FALSE, message=FALSE, echo=FALSE}
+
+
+daily_load_stats = sqldf("SELECT day, weekdays, max(hourly_load) as max_load, min(hourly_load) as min_load, avg(hourly_load) as avg_load from ymd group by weekdays")
+
+fig6 <- plot_ly(daily_load_stats, x = daily_load_stats$weekdays, y=daily_load_stats$max_load, name = 'maximum hourly_load', type = 'scatter', mode = 'lines')
+fig6 <- fig6 %>% add_trace(y =daily_load_stats$min_load, name = 'minimum hourly_load',mode = 'lines',type = 'scatter')
+fig6 <- fig6 %>% add_trace(y =daily_load_stats$avg_load, name = 'average hourly_load',mode = 'lines',type = 'scatter')
+x_axis_6 <- list(title='Days')
+y_axis_6 <- list(title = 'hourly_load')
+title_6 <- (list="Energy stats for Days")
+fig6 <- fig6 %>% layout(xaxis = x_axis_6, yaxis = y_axis_6, title=title_6)
+fig6
+
+
+```
+
+
+
+
+### **Hourly Data Visualizations**
+
+```{r hourly_data_prepration, warning=FALSE, message=FALSE, echo=FALSE}
+avg_hr = sqldf("SELECT avg(hourly_load) as avg_hr_load from ymd group by hour")
+fig7 <- plot_ly(avg_hr, x = avg_hr$hour, y=avg_hr$avg_hr_load, name = 'average hourly_load', type = 'scatter', mode = 'lines')
+```
+
+Following code plots the averaged 24 hrs data analysis with `hour` on x-axis and `hourly_load` on y-axis. Analysis of graph shows that from the midnight(0:00), there is decrease in energy load as the activities of people are suspended at that time. Afterwards, from 5:00am the trend keeps on increasing because the day activities start to increase and hence the energy consumption also. From 10:00am to 1:00pm the energy load seems to be maximum in this range because utilization of energy is at its peak in these hours. Then due to break in all activities, there is a significant decrement in energy load and from 4:00pm to 8:00pm activities get resume and energy consumption increases. At day end, after 8:00pm since all day activities are concluded and hence energy usage also decrease. This showed the average analysis for a 24hr day.   
+
+### **Line plot for 24hrs**
+```{r hourly_lineplot, warning=FALSE, message=FALSE, echo=FALSE}
+x_axis_7 <- list(title='Hours')
+y_axis_7 <- list(title = 'hourly_load')
+title_7 <- (list="Energy load for 24Hours based on year")
+fig7 <- fig7 %>% layout(xaxis = x_axis_7, yaxis = y_axis_7, title=title_7)
+fig7
+```
+
+
+
+
+
+
+
+
+
+
+
+
+Below is the code used to generate all of the plots.
+
+```{r ref.label='libraries', eval=FALSE}
+```
+```{r ref.label='filereading', eval=FALSE}
+```
+```{r ref.label='load', eval=FALSE}
+```
+```{r ref.label='hourly_load_frequency_hist', eval=FALSE}
+```
+```{r ref.label='tidyr_data_cleaning', eval=FALSE}
+```
+```{r ref.label='month_boxplot_graph', eval=FALSE}
+```
+```{r ref.label='month_stats_graph', eval=FALSE}
+```
+```{r ref.label='daily_box_plot', eval=FALSE}
+```
+```{r ref.label='daily_stats_graph', eval=FALSE}
+```
+```{r ref.label='hourly_data_prepration', eval=FALSE}
+```
+```{r ref.label='hourly_lineplot', eval=FALSE}
+```
+```{r ref.label='monthly_peak_power', eval=FALSE}
+```
+```{r ref.label='monthly_total_energy', eval=FALSE}
+```
+```{r ref.label='hour_vs_month', eval=FALSE}
+```
+```{r ref.label='week_vs_month', eval=FALSE}
+```
+

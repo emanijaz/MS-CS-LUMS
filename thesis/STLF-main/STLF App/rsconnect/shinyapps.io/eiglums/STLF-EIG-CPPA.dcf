@@ -1,0 +1,13 @@
+name: STLF-EIG-CPPA
+title: STLF-EIG-CPPA
+username:
+account: eiglums
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 2244009
+bundleId: 4339863
+url: https://eiglums.shinyapps.io/STLF-EIG-CPPA/
+when: 1615650332.2647
+asMultiple: FALSE
+asStatic: FALSE
+ignoredFiles: DISCO_Load_Maintenance.csv|DISCO_week_forecast.csv|Forecast_for_Tomorrow.csv|Historic_DISCO_Load.csv|Historic_NPCC_Load_Forecast_Weather.csv|Log.csv|New Features.txt|PITC_Forecast_for_Tomorrow.csv|PITC_Historic_Forecast.csv|week_forecast.csv|www/banana.gif|Backup files
