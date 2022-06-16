@@ -1,0 +1,14 @@
+name: FirstShinyApp
+title: FirstShinyApp
+username:
+account: eman-ijaz
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 4380824
+bundleId: 4871420
+url: https://eman-ijaz.shinyapps.io/FirstShinyApp/
+when: 1627635000.5176
+lastSyncTime: 1627635000.51763
+asMultiple: FALSE
+asStatic: FALSE
+ignoredFiles: 2016-2020-Historic-Data (copy).csv|data/2016-2020-Historic-Data.csv

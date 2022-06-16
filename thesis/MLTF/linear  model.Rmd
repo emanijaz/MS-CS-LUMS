@@ -1,0 +1,161 @@
+---
+title: "Linear Model"
+output: html_document
+---
+
+```{r libraries, echo=FALSE, warning=FALSE}
+
+library(plotly)
+library(Metrics)
+library(caTools)
+library(MASS)
+library(dplyr)
+library(sqldf)
+
+
+```
+
+
+
+
+```{r lm total monthly energy}
+filename = '2016-2020-Historic-Data.csv'
+data<- read.csv(filename , sep=',', header=TRUE,fill = TRUE, stringsAsFactors = FALSE)
+
+selected_cols = c('hourly_load','Faislabad_apparentTemperature','Peshawar_humidity','Hyderabad_humidity','Faislabad_windSpeed','Quetta_dewPoint','Gujranwala_windSpeed', 'month','year')
+
+
+data = data[(25561:39482),]  ## getting 2019  and 2020 data
+data = subset(data, !is.na(hourly_load)) ## 2019 DEC, last some days having NA for hourly_load, removing them
+data = data[,c(-4,-5,-15,-16,-26,-27,-37,-38,-48,-49,-59,-60,-70,-71,-81,-82,-92,-93)] ## removing categorical cols
+
+data$month <- strftime(data$Time, '%m')
+data$year <- strftime(data$Time, '%Y')
+data_without_time= data[,c(-1)]
+data_without_time[is.na(data_without_time)] = 0
+total_energy_df <- aggregate(. ~month+year, data_without_time, sum)
+
+
+total_energy_df = dplyr::select(total_energy_df, selected_cols)
+train_data = head(total_energy_df, 15)
+valid_data = tail(total_energy_df, 4)
+
+Model = lm(hourly_load~Faislabad_apparentTemperature+Peshawar_humidity+Hyderabad_humidity+Faislabad_windSpeed+Quetta_dewPoint+Gujranwala_windSpeed, data=train_data)
+ModelSummary = summary(Model)
+print(ModelSummary)
+valid_preds <- predict(Model, valid_data)
+valid_actuals <- valid_data$hourly_load
+# printStats(ModelSummary, valid_actuals, valid_preds)
+
+
+filename_next_year = 'NPCC Historic Data 2021-01-01-2021-07-31.csv'
+next_year_data = read.csv(filename_next_year , sep=',', header=TRUE,fill = TRUE, stringsAsFactors = FALSE)
+next_year_data = subset(next_year_data, !is.na(hourly_load))
+next_year_data = next_year_data[,c(-4,-5,-15,-16,-26,-27,-37,-38,-48,-49,-59,-60,-70,-71,-81,-82,-92,-93)] ## removing categorical cols
+next_year_data$month <- strftime(next_year_data$Time, '%m')
+next_year_data$year <- strftime(next_year_data$Time, '%Y')
+next_year_data= next_year_data[,c(-1)]  ## remove time col
+next_year_data[is.na(next_year_data)] = 0
+
+test_new_year_data <- aggregate(. ~month+year, next_year_data, sum)
+test_new_year_data = dplyr::select(test_new_year_data,selected_cols)
+pred_new_year <- predict(Model, test_new_year_data)
+actual_new_year <- test_new_year_data$hourly_load
+printStats(ModelSummary, actual_new_year, pred_new_year)
+x_axis = c('June 2019','July 2019','Aug 2019','Sep 2019','Oct 2019','Nov 2019','Dec 2019','Jan 2020','Feb 2020','March 2020','April 2020','May 2020','June 2020','July 2020','Aug 2020','Sep 2020','Oct 2020','Nov 2020', 'Dec 2020')
+x_axis_new = c('Jan 2021', 'Feb 2021', 'March 2021', 'April 2021', 'May 2021', 'June 2021', 'July 2021')
+fig<-plot_ly(total_energy_df, x=x_axis, y= total_energy_df$hourly_load, mode='lines', type='scatter', name="Total Monthly Energy")
+fig<- fig%>% add_lines( x=c(20,21,22,23,24,25,26), pred_new_year, name="Total Monthly Energy Forecast 2021")
+fig<- fig%>% add_lines( x=c(20,21,22,23,24,25,26), actual_new_year, name="Total Monthly Energy 2021 ")
+fig
+
+
+
+
+
+```
+
+```{r lm monthly peak power}
+filename = '2016-2020-Historic-Data.csv'
+data<- read.csv(filename , sep=',', header=TRUE,fill = TRUE, stringsAsFactors = FALSE)
+selected_cols = c('hourly_load','Faislabad_apparentTemperature','Peshawar_humidity','Hyderabad_humidity','Gujranwala_windSpeed', 'month','year')
+
+data = data[(25561:39482),]  ## getting 2019  and 2020 data
+data = subset(data, !is.na(hourly_load)) ## 2019 DEC, last some days having NA for hourly_load, removing them
+data = data[,c(-4,-5,-15,-16,-26,-27,-37,-38,-48,-49,-59,-60,-70,-71,-81,-82,-92,-93)] ## removing categorical cols
+data$month <- strftime(data$Time, '%m')
+data$year <- strftime(data$Time, '%Y')
+data_without_time= data[,c(-1)]
+data_without_time[is.na(data_without_time)] = 0
+
+total_peak_power = sqldf("SELECT *,max(hourly_load) as dup_hourly_load from data_without_time group by year,month")
+total_peak_power = total_peak_power[,-which(names(total_peak_power) == 'dup_hourly_load')]
+
+total_peak_power = dplyr::select(total_peak_power, selected_cols)
+train_data = head(total_peak_power, 15)
+valid_data = tail(total_peak_power, 4)
+
+Model = lm(hourly_load~Faislabad_apparentTemperature+Peshawar_humidity+Hyderabad_humidity+Gujranwala_windSpeed, data=train_data)
+ModelSummary = summary(Model)
+print(ModelSummary)
+valid_preds <- predict(Model, valid_data)
+valid_actuals <- valid_data$hourly_load
+# printStats(ModelSummary, valid_actuals, valid_preds)
+
+
+filename_next_year = 'NPCC Historic Data 2021-01-01-2021-07-31.csv'
+next_year_data = read.csv(filename_next_year , sep=',', header=TRUE,fill = TRUE, stringsAsFactors = FALSE)
+next_year_data = subset(next_year_data, !is.na(hourly_load))
+next_year_data = next_year_data[,c(-4,-5,-15,-16,-26,-27,-37,-38,-48,-49,-59,-60,-70,-71,-81,-82,-92,-93)] ## removing categorical cols
+next_year_data$month <- strftime(next_year_data$Time, '%m')
+next_year_data$year <- strftime(next_year_data$Time, '%Y')
+next_year_data= next_year_data[,c(-1)]  ## remove time col
+next_year_data[is.na(next_year_data)] = 0
+
+test_new_year_data = sqldf("SELECT *,max(hourly_load) as dup_hourly_load from next_year_data group by year,month")
+test_new_year_data = test_new_year_data[,-which(names(test_new_year_data) == 'dup_hourly_load')]
+test_new_year_data = dplyr::select(test_new_year_data,selected_cols)
+pred_new_year <- predict(Model, test_new_year_data)
+actual_new_year <- test_new_year_data$hourly_load
+printStats(ModelSummary, actual_new_year, pred_new_year)
+x_axis = c('June 2019','July 2019','Aug 2019','Sep 2019','Oct 2019','Nov 2019','Dec 2019','Jan 2020','Feb 2020','March 2020','April 2020','May 2020','June 2020','July 2020','Aug 2020','Sep 2020','Oct 2020','Nov 2020', 'Dec 2020')
+x_axis_new = c('Jan 2021', 'Feb 2021', 'March 2021', 'April 2021', 'May 2021', 'June 2021', 'July 2021')
+fig1<-plot_ly(total_peak_power, x=x_axis, y= total_peak_power$hourly_load, mode='lines', type='scatter', name="Monthly Peak Power")
+fig1<- fig1%>% add_lines( x=c(20,21,22,23,24,25,26), pred_new_year, name="Monthly Peak Power Forecast 2021")
+fig1<- fig1%>% add_lines( x=c(20,21,22,23,24,25,26), actual_new_year, name="Monthly Peak Power 2021 ")
+fig1
+
+
+
+
+
+```
+
+
+
+
+
+```{r stats}
+mape <- function(actual,pred){
+    mape <- mean(abs((actual - pred)/actual))*100
+    return (mape)
+}
+
+RSQUARE = function(y_actual,y_predict){
+  cor(y_actual,y_predict)^2
+}
+  
+printStats <- function(ModelSummary, actual, pred){
+  # SSE <- sum((actual - pred) ^2)
+  # SST <- sum((actual - mean(actual)) ^2)
+  # print(paste("R squared for test data" ,1-(SSE/SST)) )  ## value of R^2 on test dataset
+  print(paste("R^2 : ", RSQUARE(actual,pred)))
+  print(paste("RMS for test data: " , mean(ModelSummary$residuals^2)))
+  print(paste("MAE Mean Absolute Error: " ,mae(actual, pred)))
+  print(paste("MASE (Mean Absolute Scaled Error): " ,mase(actual, pred)))
+  print(paste("mape (Mean Absolute Percent Error) : " ,mape(actual, pred)))
+  print(paste("RMSE (Root Mean Squared Error): " ,rmse(actual, pred)))
+  print(paste("RAE (Relative Absolute Error): " ,rae(actual, pred)))
+}
+
+```

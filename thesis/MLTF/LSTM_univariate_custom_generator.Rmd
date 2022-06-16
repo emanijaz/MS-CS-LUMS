@@ -1,0 +1,198 @@
+---
+title: "Neural Net"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+
+```{r libraries, echo=FALSE, warning=FALSE}
+
+library(plotly)
+library(Metrics)
+library(caTools)
+library(MASS)
+library(dplyr)
+library(sqldf)
+library(tensorflow) #Neural Network Backend for Keras
+library(keras) #Neural Network Modeling
+library(plyr) #Data manipulation
+library(dplyr) # Data Manipulation
+library(caret) #Machine Learning Tools for Training and Validatio
+
+
+```
+
+
+``` {r NN}
+
+filename = '2016-2020-Historic-Data.csv'
+data<- read.csv(filename , sep=',', header=TRUE,fill = TRUE, stringsAsFactors = FALSE)
+filename_next_year = 'NPCC Historic Data 2021-01-01-2021-07-31.csv'
+next_year_data = read.csv(filename_next_year , sep=',', header=TRUE,fill = TRUE, stringsAsFactors = FALSE)
+data = rbind(data, next_year_data)
+
+
+data = data[(25561:nrow(data)),]  ## getting 2019, 2020, and 2021 data
+data = subset(data, !is.na(hourly_load)) ## 2019 DEC, last some days having NA for hourly_load, removing them
+data = data[,c(-4,-5,-15,-16,-26,-27,-37,-38,-48,-49,-59,-60,-70,-71,-81,-82,-92,-93)] ## removing categorical cols
+
+data$month <- strftime(data$Time, '%m')
+data$year <- strftime(data$Time, '%Y')
+data= data[,c(-1)]  # removing time column
+data[is.na(data)] = 0
+data <- aggregate(. ~month+year, data, sum)
+
+
+Series = data$hourly_load  ## getting hourly load column
+diffed = diff(Series, differences = 1)  # transform data to stationarity
+
+
+lags <- function(x, k=1){
+  
+  lagged =  c(rep(NA, k), x[1:(length(x)-k)])
+  DF = as.data.frame(cbind(lagged, x))
+  colnames(DF) <- c( paste0('x-', k), 'x')
+  DF[is.na(DF)] <- 0
+  return(DF)
+}
+supervised = lags(diffed, 1)
+
+# print(supervised)
+
+N = nrow(supervised)
+n = round(N *0.66, digits = 0)
+train = supervised[1:n, ]
+test  = supervised[(n+1):N,  ]
+
+normalize <- function(train, test, feature_range = c(0, 1)) {
+    x = train
+    fr_min = feature_range[1]
+    fr_max = feature_range[2]
+    std_train = ((x - min(x) ) / (max(x) - min(x)  ))
+    std_test  = ((test - min(x) ) / (max(x) - min(x)  ))
+    
+    scaled_train = std_train *(fr_max -fr_min) + fr_min
+    scaled_test = std_test *(fr_max -fr_min) + fr_min
+    
+    return( list(scaled_train = as.vector(scaled_train), scaled_test = as.vector(scaled_test) ,scaler= c(min =min(x), max = max(x))) )
+    
+}
+  
+  
+## inverse-transform
+inverter = function(scaled, scaler, feature_range = c(0, 1)){
+  min = scaler[1]
+  max = scaler[2]
+  n = length(scaled)
+  mins = feature_range[1]
+  maxs = feature_range[2]
+  inverted_dfs = numeric(n)
+  
+  for( i in 1:n){
+    X = (scaled[i]- mins)/(maxs - mins)
+    rawValues = X *(max - min) + min
+    inverted_dfs[i] <- rawValues
+  }
+  return(inverted_dfs)
+}
+  
+  
+Scaled = normalize(train, test, c(-1, 1))
+
+y_train = Scaled$scaled_train[, 2]
+x_train = Scaled$scaled_train[, 1]
+
+y_test = Scaled$scaled_test[, 2]
+x_test = Scaled$scaled_test[, 1]
+  
+
+## Model fitting
+
+dim(x_train) <- c(length(x_train), 1, 1)
+dim(x_train)
+X_shape2 = dim(x_train)[2]
+X_shape3 = dim(x_train)[3]
+batch_size = 1
+units = 1
+
+model <- keras_model_sequential() 
+model%>%
+  layer_lstm(units, batch_input_shape = c(batch_size, X_shape2, X_shape3), stateful= TRUE)%>%
+  layer_dense(units = 1)
+
+
+
+model %>% compile(
+  loss = 'mean_squared_error',
+  optimizer = optimizer_adam( lr= 0.02 , decay = 1e-6 )
+  # metrics = c('accuracy')
+)
+
+
+
+summary(model)
+Epochs = 500 
+nb_epoch = Epochs   
+for(i in 1:nb_epoch ){
+  model %>% fit(x_train, y_train, epochs=1, batch_size=batch_size, verbose=1, shuffle=FALSE)
+  model %>% reset_states()
+}
+
+
+L = length(x_test)
+dim(x_test) = c(length(x_test), 1, 1)
+
+scaler = Scaled$scaler
+
+predictions = numeric(L)
+actuals_y = numeric(L)
+for(i in 1:L){
+  X = x_test[i , , ]
+  dim(X) = c(1,1,1)
+  # forecast
+  yhat = model %>% predict(X, batch_size=batch_size)
+  
+  # invert scaling
+  yhat = inverter(yhat, scaler,  c(-1, 1))
+  yactual = inverter(y_test[i], scaler,  c(-1, 1))
+  
+  # invert differencing
+  yhat  = yhat + Series[(n+i)]
+  yactual  = yactual + Series[(n+i)]
+  # save prediction
+  predictions[i] <- yhat
+  actuals_y[i] <- yactual
+}
+
+printStats(ModelSummary, actuals_y, predictions)
+
+xform <- list(categoryorder = "array",
+                  categoryarray = x_axis)
+x_axis = c('June 2019','July 2019','Aug 2019','Sep 2019','Oct 2019','Nov 2019','Dec 2019','Jan 2020','Feb 2020','March 2020','April 2020','May 2020','June 2020','July 2020','Aug 2020','Sep 2020','Oct 2020','Nov 2020', 'Dec 2020','Jan 2021','Feb 2021','March 2021','April 2021','May 2021','June 2021','July 2021')
+fig<-plot_ly(data, x=x_axis, y= data$hourly_load, mode='lines', type='scatter', name="Actual")
+fig <- fig %>% add_trace(y = append(rep.int(NA, nrow(data) - length(predictions)), predictions), name = 'Forecast', mode = 'markers+lines')
+fig<- fig %>% layout(title ='LSTM Monthly hourly load prediction',yaxis=list(title="Load MW"), xaxis=xform)
+fig
+
+printStats <- function(ModelSummary, actual, pred){
+  print(paste("R^2 : ", RSQUARE(actual,pred)))
+  print(paste("RMS for test data: " , mean(ModelSummary$residuals^2)))
+  print(paste("MAE Mean Absolute Error: " ,mae(actual, pred)))
+  print(paste("MASE (Mean Absolute Scaled Error): " ,mase(actual, pred)))
+  print(paste("mape (Mean Absolute Percent Error) : " ,mape(actual, pred)))
+  print(paste("RMSE (Root Mean Squared Error): " ,rmse(actual, pred)))
+  print(paste("RAE (Relative Absolute Error): " ,rae(actual, pred)))
+}
+
+
+
+
+
+```
+
+
+

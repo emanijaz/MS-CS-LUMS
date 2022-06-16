@@ -1,0 +1,141 @@
+---
+title: "ARIMA model"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+---
+title: "ARIMA model"
+output: html_document
+---
+```{r ARIMA model}
+
+library(forecast)
+library(tseries)
+
+data(AirPassengers)
+# class(AirPassengers)
+# 
+# start(AirPassengers)
+# 
+# end(AirPassengers)
+# 
+# frequency(AirPassengers)
+# 
+# summary(AirPassengers)
+# 
+# plot(AirPassengers)
+# 
+# cycle(AirPassengers)
+# 
+# 
+# boxplot(AirPassengers~cycle(AirPassengers))
+# 
+
+tsdata<-ts(AirPassengers,frequency=12)
+plot(tsdata)
+
+# ddata <- decompose(tsdata, "multiplicative")
+# plot(ddata)
+
+
+## testing stationarity
+
+adf.test(tsdata,k=12)  ## Augmented Dickey Fuller test (ADF Test) is a common statistical test used to test whether a given Time series is stationary or not.
+tsdata1<- diff(tsdata, differences = 1)
+plot(tsdata1)
+adf.test(tsdata1,k=12)
+tsdata2<- diff(tsdata, differences = 2)
+adf.test(tsdata2,k=12) ## d =2
+plot(tsdata2) 
+pacf(tsdata2)  ## p = 0.1 is significant
+Acf(tsdata2)  ## q = 8
+
+model<-Arima(tsdata, order=c(0.1,2,8))
+summary(model)
+myforecast<-forecast(model, h=12)
+
+
+
+# model = auto.arima(AirPassengers,ic="aic", trace=TRUE)
+
+```
+
+
+``` {r ARIMA model for total monthly energy, echo=FALSE}
+
+filename = '2016-2020-Historic-Data.csv'
+data<- read.csv(filename , sep=',', header=TRUE,fill = TRUE, stringsAsFactors = FALSE)
+
+selected_cols = c('hourly_load','Faislabad_apparentTemperature','Peshawar_humidity','Hyderabad_humidity','Faislabad_windSpeed','Quetta_dewPoint','Gujranwala_windSpeed', 'month','year')
+data = data[(25561:39482),]  ## getting 2019  and 2020 data
+data = subset(data, !is.na(hourly_load)) ## 2019 DEC, last some days having NA for hourly_load, removing them
+data = data[,c(-4,-5,-15,-16,-26,-27,-37,-38,-48,-49,-59,-60,-70,-71,-81,-82,-92,-93)] ## removing categorical cols
+
+data$month <- strftime(data$Time, '%m')
+data$year <- strftime(data$Time, '%Y')
+data_without_time= data[,c(-1)]
+data_without_time[is.na(data_without_time)] = 0
+total_energy_df <- aggregate(. ~month+year, data_without_time, sum)
+total_energy_df = dplyr::select(total_energy_df, selected_cols)
+
+
+monthly_load_ts <- ts(total_energy_df$hourly_load, start = c(2019, 6), frequency = 12)
+
+# adf.test(hourly_load_ts,k=12)
+# 
+# hourly_load_ts1<- diff(hourly_load_ts, differences = 1)
+# plot(hourly_load_ts1)
+# adf.test(hourly_load_ts1,k=12)
+monthly_load_model = auto.arima(monthly_load_ts,ic="aic", trace=TRUE)
+
+plot.ts(monthly_load_model$residuals)
+acf(ts(monthly_load_model$residuals), main='ACF residuals')
+pacf(ts(monthly_load_model$residuals), main='PACF residuals')
+
+monthly_load_forecast<-forecast(monthly_load_model, level = c(95), h=12)
+plot(monthly_load_forecast, main = "Total monthly energy")
+```
+
+
+``` {r ARIMA model for peak power energy, echo=FALSE}
+
+filename = '2016-2020-Historic-Data.csv'
+data<- read.csv(filename , sep=',', header=TRUE,fill = TRUE, stringsAsFactors = FALSE)
+selected_cols = c('hourly_load','Faislabad_apparentTemperature','Peshawar_humidity','Hyderabad_humidity','Gujranwala_windSpeed', 'month','year')
+
+data = data[(25561:39482),]  ## getting 2019  and 2020 data
+data = subset(data, !is.na(hourly_load)) ## 2019 DEC, last some days having NA for hourly_load, removing them
+data = data[,c(-4,-5,-15,-16,-26,-27,-37,-38,-48,-49,-59,-60,-70,-71,-81,-82,-92,-93)] ## removing categorical cols
+data$month <- strftime(data$Time, '%m')
+data$year <- strftime(data$Time, '%Y')
+data_without_time= data[,c(-1)]
+data_without_time[is.na(data_without_time)] = 0
+
+total_peak_power = sqldf("SELECT *,max(hourly_load) as dup_hourly_load from data_without_time group by year,month")
+total_peak_power = total_peak_power[,-which(names(total_peak_power) == 'dup_hourly_load')]
+total_peak_power = select(total_peak_power, selected_cols)
+
+peak_power_ts <- ts(total_energy_df$hourly_load, start = c(2019, 6), frequency = 12)
+
+# adf.test(peak_power_ts,k=12)
+# 
+# peak_power_ts1<- diff(peak_power_ts, differences = 1)
+# plot(peak_power_ts1)
+# adf.test(peak_power_ts1,k=12)
+peak_power_model = auto.arima(peak_power_ts,ic="aic", trace=TRUE)
+
+plot.ts(peak_power_model$residuals)
+acf(ts(peak_power_model$residuals), main='ACF residuals')
+pacf(ts(peak_power_model$residuals), main='PACF residuals')
+
+peak_power_forecast<-forecast(peak_power_model, level = c(95), h=12)
+plot(peak_power_forecast, main = "Monthly Peak Power energy")
+```
+
+
+
+

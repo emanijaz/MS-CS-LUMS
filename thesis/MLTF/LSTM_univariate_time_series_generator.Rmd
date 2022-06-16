@@ -1,0 +1,325 @@
+---
+title: "Neural Net"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+
+```{r libraries, echo=FALSE, warning=FALSE}
+
+library(plotly)
+library(Metrics)
+library(caTools)
+library(MASS)
+library(dplyr)
+library(sqldf)
+library(tensorflow) #Neural Network Backend for Keras
+library(keras) #Neural Network Modeling
+library(plyr) #Data manipulation
+library(dplyr) # Data Manipulation
+library(caret) #Machine Learning Tools for Training and Validatio
+
+
+```
+
+
+``` {r total_monthly_energy: univariate LSTM timeseries generator}
+
+filename = '2016-2020-Historic-Data.csv'
+data<- read.csv(filename , sep=',', header=TRUE,fill = TRUE, stringsAsFactors = FALSE)
+filename_next_year = 'NPCC Historic Data 2021-01-01-2021-07-31.csv'
+next_year_data = read.csv(filename_next_year , sep=',', header=TRUE,fill = TRUE, stringsAsFactors = FALSE)
+data = rbind(data, next_year_data)
+
+
+data = data[(25561:nrow(data)),]  ## getting 2019, 2020, and 2021 data
+data = subset(data, !is.na(hourly_load)) ## 2019 DEC, last some days having NA for hourly_load, removing them
+data = data[,c(-4,-5,-15,-16,-26,-27,-37,-38,-48,-49,-59,-60,-70,-71,-81,-82,-92,-93)] ## removing categorical cols
+
+data$month <- strftime(data$Time, '%m')
+data$year <- strftime(data$Time, '%Y')
+data= data[,c(-1)]  # removing time column
+data[is.na(data)] = 0
+data <- aggregate(. ~month+year, data, sum)  ## aggregate total monthly energy data
+
+
+## SCALING/NORMALIZATION
+normalize <- function(data, feature_range = c(0, 1)) {
+    x = data
+    fr_min = feature_range[1]
+    fr_max = feature_range[2]
+    std_train = ((x - min(x) ) / (max(x) - min(x)  ))
+    
+    scaled_train = std_train *(fr_max -fr_min) + fr_min
+    
+    return( list(scaled_train = as.vector(scaled_train), scaler= c(min =min(x), max = max(x))) )
+    
+}
+
+## inverse-transform of normalize
+inverter = function(scaled, scaler, feature_range = c(0, 1)){
+  min = scaler[1]
+  max = scaler[2]
+  n = length(scaled)
+  mins = feature_range[1]
+  maxs = feature_range[2]
+  inverted_dfs = numeric(n)
+
+  for( i in 1:n){
+    X = (scaled[i]- mins)/(maxs - mins)
+    rawValues = X *(max - min) + min
+    inverted_dfs[i] <- rawValues
+  }
+  return(inverted_dfs)
+}
+  
+
+
+Series = data$hourly_load  ## getting hourly load column
+# diffed = diff(Series, differences = 1)  # transform data to stationarity
+Scaled = normalize(Series, c(-1, 1))
+x_train = Scaled$scaled_train
+
+
+## defining parameters
+n_input = 12
+n_features = 1
+BATCH_SIZE = 1
+units = 400
+
+## defining time series generator
+train_gen =  timeseries_generator(as.matrix(x_train), as.matrix(x_train), length=n_input, batch_size=BATCH_SIZE)
+
+
+## Model fitting
+model <- keras_model_sequential() 
+model %>%
+  layer_lstm(units, activation = "relu", input_shape = c(n_input, n_features)) %>%
+  # layer_lstm(units, batch_input_shape = c(batch_size, X_shape2, X_shape3), stateful= TRUE)%>%
+  layer_dropout(rate=0.15) %>%
+  layer_dense(units = 1)
+   
+
+
+## model compiling
+model %>% compile(
+  loss = 'mean_squared_error',
+  optimizer = optimizer_adam( lr= 0.001 , decay = 1e-6 )
+)
+
+summary(model)
+Epochs = 100
+
+## training model
+hist <- model %>% fit_generator(
+      generator = train_gen,
+      steps_per_epoch = floor((train_gen$end_index - train_gen$start_index + 1) / batch_size),
+      epochs = Epochs
+  )
+
+
+## making future forecast
+pred_list = list()
+batch = x_train[15:length(x_train)]  ## 15 : to end , fetching last 12 elements
+
+for(i in 1:n_input){
+
+  dim(batch) = c(1, n_input, n_features)
+  p <- model %>% predict(batch, batch_size=BATCH_SIZE)
+  pred_list <- c(pred_list, p)
+  batch <- append(batch, pred_list[i])
+  batch <- as.numeric(batch[2:length(batch)])
+
+}
+
+
+## inverting predictions
+inverted_predictions = inverter(as.numeric(pred_list), Scaled$scaler, c(-1, 1))
+print(inverted_predictions)
+
+
+##plotting forecast
+x_axis = c('June 2019','July 2019','Aug 2019','Sep 2019','Oct 2019','Nov 2019','Dec 2019','Jan 2020','Feb 2020','March 2020','April 2020','May 2020','June 2020','July 2020','Aug 2020','Sep 2020','Oct 2020','Nov 2020', 'Dec 2020','Jan 2021','Feb 2021','March 2021','April 2021','May 2021','June 2021','July 2021', 'Aug 2021','Sep 2021','Oct 2021','Nov 2021', 'Dec 2021', 'Jan 2022','Feb 2022','March 2022','April 2022','May 2022','June 2022', 'Aug 2022' )
+
+fig<-plot_ly(data, x=x_axis, y= append(data$hourly_load, rep.int(NA, 12)), mode='lines', type='scatter', name="Actual")
+fig <- fig %>% add_trace(y = append(rep.int(NA, 26), inverted_predictions), name = 'Forecast', mode = 'markers+lines')
+fig<- fig %>% layout(title ='LSTM Monthly hourly load prediction',yaxis=list(title="Load MW"), xaxis=xform)
+fig
+
+
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+``` {r LSTM_peak_forecast }
+
+
+filename = '2016-2020-Historic-Data.csv'
+data<- read.csv(filename , sep=',', header=TRUE,fill = TRUE, stringsAsFactors = FALSE)
+filename_next_year = 'NPCC Historic Data 2021-01-01-2021-07-31.csv'
+next_year_data = read.csv(filename_next_year , sep=',', header=TRUE,fill = TRUE, stringsAsFactors = FALSE)
+data = rbind(data, next_year_data)
+
+
+data = data[(25561:nrow(data)),]  ## getting 2019, 2020, and 2021 data
+data = subset(data, !is.na(hourly_load)) ## 2019 DEC, last some days having NA for hourly_load, removing them
+data = data[,c(-4,-5,-15,-16,-26,-27,-37,-38,-48,-49,-59,-60,-70,-71,-81,-82,-92,-93)] ## removing categorical cols
+
+data$month <- strftime(data$Time, '%m')
+data$year <- strftime(data$Time, '%Y')
+data= data[,c(-1)]  # removing time column
+data[is.na(data)] = 0
+data = sqldf("SELECT *,max(hourly_load) as dup_hourly_load from data group by year,month")
+data = data[,-which(names(data) == 'dup_hourly_load')]
+
+
+## SCALING/NORMALIZATION
+normalize <- function(data, feature_range = c(0, 1)) {
+    x = data
+    fr_min = feature_range[1]
+    fr_max = feature_range[2]
+    std_train = ((x - min(x) ) / (max(x) - min(x)  ))
+    
+    scaled_train = std_train *(fr_max -fr_min) + fr_min
+    
+    return( list(scaled_train = as.vector(scaled_train), scaler= c(min =min(x), max = max(x))) )
+    
+}
+
+## inverse-transform of normalize
+inverter = function(scaled, scaler, feature_range = c(0, 1)){
+  min = scaler[1]
+  max = scaler[2]
+  n = length(scaled)
+  mins = feature_range[1]
+  maxs = feature_range[2]
+  inverted_dfs = numeric(n)
+
+  for( i in 1:n){
+    X = (scaled[i]- mins)/(maxs - mins)
+    rawValues = X *(max - min) + min
+    inverted_dfs[i] <- rawValues
+  }
+  return(inverted_dfs)
+}
+  
+
+
+Series = data$hourly_load  ## getting hourly load column
+# diffed = diff(Series, differences = 1)  # transform data to stationarity
+Scaled = normalize(Series, c(-1, 1))
+x_train = Scaled$scaled_train
+
+
+## defining parameters
+n_input = 12
+n_features = 1
+BATCH_SIZE = 1
+units = 400
+
+## defining time series generator
+train_gen =  timeseries_generator(as.matrix(x_train), as.matrix(x_train), length=n_input, batch_size=BATCH_SIZE)
+
+
+## Model fitting
+model <- keras_model_sequential() 
+model %>%
+  layer_lstm(units, activation = "relu", input_shape = c(n_input, n_features)) %>%
+  # layer_lstm(units, batch_input_shape = c(batch_size, X_shape2, X_shape3), stateful= TRUE)%>%
+  layer_dropout(rate=0.15) %>%
+  layer_dense(units = 1)
+   
+
+
+## model compiling
+model %>% compile(
+  loss = 'mean_squared_error',
+  optimizer = optimizer_adam( lr= 0.001 , decay = 1e-6 )
+)
+
+summary(model)
+Epochs = 100
+
+## training model
+hist <- model %>% fit_generator(
+      generator = train_gen,
+      steps_per_epoch = floor((train_gen$end_index - train_gen$start_index + 1) / batch_size),
+      epochs = Epochs
+  )
+
+
+## making future forecast
+pred_list = list()
+batch = x_train[15:length(x_train)]  ## 15 : to end , fetching last 12 elements
+
+for(i in 1:n_input){
+
+  dim(batch) = c(1, n_input, n_features)
+  p <- model %>% predict(batch, batch_size=BATCH_SIZE)
+  pred_list <- c(pred_list, p)
+  batch <- append(batch, pred_list[i])
+  batch <- as.numeric(batch[2:length(batch)])
+
+}
+
+
+## inverting predictions
+inverted_predictions = inverter(as.numeric(pred_list), Scaled$scaler, c(-1, 1))
+print(inverted_predictions)
+
+
+##plotting forecast
+x_axis = c('June 2019','July 2019','Aug 2019','Sep 2019','Oct 2019','Nov 2019','Dec 2019','Jan 2020','Feb 2020','March 2020','April 2020','May 2020','June 2020','July 2020','Aug 2020','Sep 2020','Oct 2020','Nov 2020', 'Dec 2020','Jan 2021','Feb 2021','March 2021','April 2021','May 2021','June 2021','July 2021', 'Aug 2021','Sep 2021','Oct 2021','Nov 2021', 'Dec 2021', 'Jan 2022','Feb 2022','March 2022','April 2022','May 2022','June 2022', 'Aug 2022' )
+
+fig<-plot_ly(data, x=x_axis, y= append(data$hourly_load, rep.int(NA, 12)), mode='lines', type='scatter', name="Actual")
+fig <- fig %>% add_trace(y = append(rep.int(NA, 26), inverted_predictions), name = 'Forecast', mode = 'lines')
+fig<- fig %>% layout(title ='LSTM Peak Power prediction',yaxis=list(title="Load MW"), xaxis=xform)
+fig
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+```
+
+
+
+
+
